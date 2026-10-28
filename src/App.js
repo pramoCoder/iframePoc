@@ -17,6 +17,18 @@ import {
   DialogActions,
   Button,
 } from "@mui/material";
+import PaymentRequestForm from "./PaymentRequestForm";
+
+const readIframePayload = (iframeUrl) => {
+  const params = new URL(iframeUrl).searchParams;
+  const captured = {};
+
+  params.forEach((value, key) => {
+    captured[key] = value;
+  });
+
+  return captured;
+};
 
 function App() {
   const [sfData, setSfData] = useState(null);
@@ -24,59 +36,66 @@ function App() {
   const [paymentIframeLoaded, setPaymentIframeLoaded] = useState(false);
   const [paymentDismissed, setPaymentDismissed] = useState(false);
   const [showLeavePaymentDialog, setShowLeavePaymentDialog] = useState(false);
+  const [paymentIframeSrc, setPaymentIframeSrc] = useState("");
+  const [paymentLoadId, setPaymentLoadId] = useState(0);
+  const [capturedIframeUrl, setCapturedIframeUrl] = useState("");
+  const [capturedPayload, setCapturedPayload] = useState(null);
 
   const paymentIframeContainerRef = useRef(null);
   const paymentIframeRef = useRef(null);
 
+  const partyId = sfData?.gwPayload?.partyId || "";
+
   const isPaymentActive =
-    Boolean(sfData?.gwPayload?.partyId) &&
-    paymentIframeLoaded &&
-    !paymentDismissed;
+    Boolean(paymentIframeSrc) && paymentIframeLoaded && !paymentDismissed;
 
   useEffect(() => {
     setCashEntryName(null);
     setPaymentIframeLoaded(false);
     setPaymentDismissed(false);
     setShowLeavePaymentDialog(false);
-  }, [sfData?.gwPayload?.partyId]);
+    setPaymentIframeSrc("");
+    setCapturedIframeUrl("");
+    setCapturedPayload(null);
+  }, [partyId]);
 
   useEffect(() => {
-      const handleMessage = (event) => {
-        if (!event.origin.includes("sandbox.vf.force.com")) return;
+    const handleMessage = (event) => {
+      if (!event.origin.includes("sandbox.vf.force.com")) return;
 
-        const data = event.data;
+      const data = event.data;
 
-        if (data === null) {
-          setSfData(null);
-          setCashEntryName(null);
-          return;
-        }
-  
-        if (
-          typeof data !== "object" ||
-          data === null ||
-          typeof data.gwMessageType === "undefined"
-        ) {
-          console.warn("Invalid message received:", data);
-          return;
-        }
+      if (data === null) {
+        setSfData(null);
+        setCashEntryName(null);
+        return;
+      }
 
-        const entryName = data.gwPayload?.cashEntryName;
+      if (
+        typeof data !== "object" ||
+        data === null ||
+        typeof data.gwMessageType === "undefined"
+      ) {
+        console.warn("Invalid message received:", data);
+        return;
+      }
 
-        if (entryName) {
-          setCashEntryName(entryName);
-          return;
-        }
+      const entryName = data.gwPayload?.cashEntryName;
 
-        setSfData(data);
-      };
-  
-      window.addEventListener("message", handleMessage);
-  
-      return () => {
-        window.removeEventListener("message", handleMessage);
-      };
-    }, []);
+      if (entryName) {
+        setCashEntryName(entryName);
+        return;
+      }
+
+      setSfData(data);
+    };
+
+    window.addEventListener("message", handleMessage);
+
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isPaymentActive) {
@@ -124,10 +143,28 @@ function App() {
     focusPaymentIframe();
   };
 
+  const handleValidPaymentRequest = (paymentUrl) => {
+    setCapturedIframeUrl("");
+    setCapturedPayload(null);
+    setPaymentIframeLoaded(false);
+    setPaymentDismissed(false);
+    setShowLeavePaymentDialog(false);
+    setCashEntryName(null);
+    setPaymentLoadId((current) => current + 1);
+    setPaymentIframeSrc(paymentUrl);
+  };
+
+  const handlePaymentIframeLoad = (event) => {
+    const iframeUrl = event.currentTarget.src;
+    setPaymentIframeLoaded(true);
+    setCapturedIframeUrl(iframeUrl);
+    setCapturedPayload(readIframePayload(iframeUrl));
+  };
+
+  const capturedEntries = capturedPayload ? Object.entries(capturedPayload) : [];
+
   return (
     <Box sx={{ backgroundColor: "#f4f6f8", minHeight: "100vh" }}>
-      
-      {/* Header */}
       <AppBar position="static">
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1, textAlign: "center" }}>
@@ -136,8 +173,7 @@ function App() {
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="lg" sx={{ mt: 4,  pb: 4 }}>
-
+      <Container maxWidth="lg" sx={{ mt: 4, pb: 4 }}>
         <Paper
           elevation={4}
           sx={{
@@ -151,10 +187,7 @@ function App() {
             {sfData ? "Customer Found - Proceed to Payment" : "Search for a Customer"}
           </Typography>
 
-          {/* Grid Container for Vertical Stack */}
           <Grid container spacing={3}>
-            
-            {/* Top Section: Search Iframe */}
             <Grid item xs={12}>
               <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
                 Search Customer
@@ -176,82 +209,97 @@ function App() {
               </Box>
             </Grid>
 
-            {sfData && (
+            <Grid item xs={12}>
+              <PaymentRequestForm
+                partyId={partyId}
+                showMissingPartyAlert={Boolean(sfData) && !partyId}
+                onValidSubmit={handleValidPaymentRequest}
+              />
+            </Grid>
+
+            {paymentDismissed && (
+              <Grid item xs={12}>
+                <Alert severity="warning">
+                  Payment was closed. Submit the form again to reload the payment iframe.
+                </Alert>
+              </Grid>
+            )}
+
+            {paymentIframeSrc && !paymentDismissed && (
               <Grid item xs={12}>
                 <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
-                  Payment Setup for {sfData.Name}
+                  Payment Setup{sfData?.Name ? ` for ${sfData.Name}` : ""}
                 </Typography>
-                {sfData.gwPayload?.partyId == null ? (
-                  <Alert severity="error">
-                    Unable to load payment setup: Guidewire Id is missing for this customer.
-                  </Alert>
-                ) : !paymentDismissed ? (
-                  <Box
-                    ref={paymentIframeContainerRef}
-                    sx={{
-                      border: "2px solid #2e7d32",
-                      borderRadius: 2,
-                      overflow: "hidden",
-                    }}
-                  >
-                    <iframe
-                      ref={paymentIframeRef}
-                      src={`https://racv--iagiqa--c.sandbox.vf.force.com/apex/ExternalCustomerPaymentVF?id=${sfData.gwPayload.partyId}`}
-                      width="100%"
-                      height="550px"
-                      style={{ border: "none" }}
-                      title="Payment Iframe"
-                      tabIndex={0}
-                      onLoad={() => setPaymentIframeLoaded(true)}
-                    />
-                  </Box>
-                ) : (
-                  <Alert severity="warning">
-                    Payment was closed. Search again or select another customer to restart payment.
-                  </Alert>
-                )}
+                <Box
+                  ref={paymentIframeContainerRef}
+                  sx={{
+                    border: "2px solid #2e7d32",
+                    borderRadius: 2,
+                    overflow: "hidden",
+                  }}
+                >
+                  <iframe
+                    key={paymentLoadId}
+                    ref={paymentIframeRef}
+                    src={paymentIframeSrc}
+                    width="100%"
+                    height="550px"
+                    style={{ border: "none" }}
+                    title="Payment Iframe"
+                    tabIndex={0}
+                    onLoad={handlePaymentIframeLoad}
+                  />
+                </Box>
+              </Grid>
+            )}
 
-                {cashEntryName && (
-                  <Card elevation={3} sx={{ borderRadius: 3, mt: 2 }}>
-                    <CardContent>
-                      <Typography>
-                        Cash entry created: <strong>{cashEntryName}</strong>
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                )}
+            {cashEntryName && (
+              <Grid item xs={12}>
+                <Card elevation={3} sx={{ borderRadius: 3 }}>
+                  <CardContent>
+                    <Typography>
+                      Cash entry created: <strong>{cashEntryName}</strong>
+                    </Typography>
+                  </CardContent>
+                </Card>
               </Grid>
             )}
           </Grid>
         </Paper>
 
-        {/* Data Display Section */}
         <Card elevation={3} sx={{ borderRadius: 3, mb: 4 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Data Received From Salesforce
+              Data Received From Iframe URL
             </Typography>
 
-            {sfData ? (
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography><strong>Message Type:</strong> {sfData.gwMessageType}</Typography>
+            {capturedPayload ? (
+              <>
+                <Typography
+                  variant="body2"
+                  sx={{ mb: 2, wordBreak: "break-all" }}
+                >
+                  <strong>Iframe URL:</strong> {capturedIframeUrl}
+                </Typography>
+                <Grid container spacing={2}>
+                  {capturedEntries.map(([key, value]) => (
+                    <Grid item xs={12} sm={6} key={key}>
+                      <Typography>
+                        <strong>{key}:</strong> {value || "Missing from iframe URL"}
+                      </Typography>
+                    </Grid>
+                  ))}
                 </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography><strong>Message Id:</strong> {sfData.gwMessageId}</Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography><strong>PartyId:</strong> {sfData.gwPayload?.partyId}</Typography>
-                </Grid>
-              </Grid>
+              </>
             ) : (
               <Typography color="text.secondary">
-                No data received yet...
+                {paymentIframeSrc && !paymentDismissed
+                  ? "Waiting for the payment iframe to load..."
+                  : "No data received yet..."}
               </Typography>
             )}
           </CardContent>
         </Card>
-
       </Container>
 
       <Dialog
@@ -279,7 +327,6 @@ function App() {
           </Button>
         </DialogActions>
       </Dialog>
-      
     </Box>
   );
 }

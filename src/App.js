@@ -43,9 +43,7 @@ function App() {
   useEffect(() => {
       const handleMessage = (event) => {
         if (!event.origin.includes("sandbox.vf.force.com")) return;
-  
-        console.log("Data received:", event.data);
-  
+
         const data = event.data;
 
         if (data === null) {
@@ -62,10 +60,6 @@ function App() {
           console.warn("Invalid message received:", data);
           return;
         }
-  
-        console.log("Message Type:", data.gwMessageType);
-        console.log("Message ID:", data.gwMessageId);
-        console.log("Payload:", data.gwPayload);
 
         const entryName = data.gwPayload?.cashEntryName;
 

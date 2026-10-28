@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/iframePoc/static/css/main.e6c13ad2.css",
+    "main.js": "/iframePoc/static/js/main.734a4683.js",
+    "static/js/453.5f686146.chunk.js": "/iframePoc/static/js/453.5f686146.chunk.js",
+    "index.html": "/iframePoc/index.html",
+    "main.e6c13ad2.css.map": "/iframePoc/static/css/main.e6c13ad2.css.map",
+    "main.734a4683.js.map": "/iframePoc/static/js/main.734a4683.js.map",
+    "453.5f686146.chunk.js.map": "/iframePoc/static/js/453.5f686146.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.e6c13ad2.css",
+    "static/js/main.734a4683.js"
+  ]
+}

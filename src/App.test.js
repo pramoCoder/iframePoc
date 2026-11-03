@@ -18,14 +18,27 @@ const selectCustomer = (partyId) => {
   });
 };
 
-const loadPaymentIframe = () => {
-  fireEvent.load(screen.getByTitle("Payment Iframe"));
+const postPaymentPayload = (iframeUrl) => {
+  const payload = Object.fromEntries(new URL(iframeUrl, window.location.origin).searchParams);
+
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: "https://racv--iagiqa--c.sandbox.vf.force.com",
+        data: {
+          gwMessageType: "PAYMENT_URL_PAYLOAD",
+          gwMessageId: payload.correlationId,
+          gwPayload: payload,
+        },
+      })
+    );
+  });
 };
 
 const rowText = (label) =>
   screen.getByText(`${label}:`, { selector: "strong" }).parentElement.textContent;
 
-test("loads the payment iframe only after a valid submit and reads the url back", () => {
+test("loads the payment iframe only after a valid submit and prints the posted payload", () => {
   render(<App />);
 
   expect(screen.getByTitle("Search Iframe")).toBeInTheDocument();
@@ -61,21 +74,23 @@ test("loads the payment iframe only after a valid submit and reads the url back"
   const paymentIframe = screen.getByTitle("Payment Iframe");
   const iframeUrl = paymentIframe.getAttribute("src");
 
+  expect(iframeUrl).toContain("ExternalCustomerPaymentVF");
   expect(iframeUrl).toContain("customerId=PARTY-123");
   expect(iframeUrl).toContain("amount=117816");
   expect(iframeUrl).toContain("id=PARTY-123");
   expect(iframeUrl).toContain("brand=RACV");
   expect(iframeUrl).toContain("sessionId=774544f2-15a9-4bff-b8c8-78d5aac0bdad");
-  expect(screen.getByText("Waiting for the payment iframe to load...")).toBeInTheDocument();
+  expect(screen.getByText("Waiting for the iframe postMessage...")).toBeInTheDocument();
 
-  loadPaymentIframe();
+  fireEvent.load(paymentIframe);
+  expect(screen.getByText("Waiting for the iframe postMessage...")).toBeInTheDocument();
 
+  postPaymentPayload(iframeUrl);
+
+  expect(rowText("Message Type")).toContain("PAYMENT_URL_PAYLOAD");
   expect(rowText("amount")).toContain("117816");
   expect(rowText("customerId")).toContain("PARTY-123");
   expect(rowText("id")).toContain("PARTY-123");
-  expect(
-    screen.getByText("Iframe URL:", { selector: "strong" }).parentElement.textContent
-  ).toContain("ExternalCustomerPaymentVF");
 
   fireEvent.change(screen.getByLabelText("amount"), {
     target: { name: "amount", value: "999" },

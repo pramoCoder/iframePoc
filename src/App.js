@@ -19,16 +19,7 @@ import {
 } from "@mui/material";
 import PaymentRequestForm from "./PaymentRequestForm";
 
-const readIframePayload = (iframeUrl) => {
-  const params = new URL(iframeUrl).searchParams;
-  const captured = {};
-
-  params.forEach((value, key) => {
-    captured[key] = value;
-  });
-
-  return captured;
-};
+const isVisualforceOrigin = (origin) => origin.includes("sandbox.vf.force.com");
 
 function App() {
   const [sfData, setSfData] = useState(null);
@@ -38,7 +29,7 @@ function App() {
   const [showLeavePaymentDialog, setShowLeavePaymentDialog] = useState(false);
   const [paymentIframeSrc, setPaymentIframeSrc] = useState("");
   const [paymentLoadId, setPaymentLoadId] = useState(0);
-  const [capturedIframeUrl, setCapturedIframeUrl] = useState("");
+  const [capturedMessage, setCapturedMessage] = useState(null);
   const [capturedPayload, setCapturedPayload] = useState(null);
 
   const paymentIframeContainerRef = useRef(null);
@@ -55,19 +46,24 @@ function App() {
     setPaymentDismissed(false);
     setShowLeavePaymentDialog(false);
     setPaymentIframeSrc("");
-    setCapturedIframeUrl("");
+    setCapturedMessage(null);
     setCapturedPayload(null);
   }, [partyId]);
 
   useEffect(() => {
     const handleMessage = (event) => {
-      if (!event.origin.includes("sandbox.vf.force.com")) return;
+      const fromVisualforce = isVisualforceOrigin(event.origin);
+      const fromThisApp = event.origin === window.location.origin;
+
+      if (!fromVisualforce && !fromThisApp) return;
 
       const data = event.data;
 
       if (data === null) {
-        setSfData(null);
-        setCashEntryName(null);
+        if (fromVisualforce) {
+          setSfData(null);
+          setCashEntryName(null);
+        }
         return;
       }
 
@@ -79,6 +75,21 @@ function App() {
         console.warn("Invalid message received:", data);
         return;
       }
+
+      if (
+        data.gwMessageType === "PAYMENT_URL_PAYLOAD" &&
+        data.gwPayload &&
+        typeof data.gwPayload === "object"
+      ) {
+        setCapturedMessage({
+          gwMessageType: data.gwMessageType,
+          gwMessageId: data.gwMessageId || "",
+        });
+        setCapturedPayload(data.gwPayload);
+        return;
+      }
+
+      if (!fromVisualforce) return;
 
       const entryName = data.gwPayload?.cashEntryName;
 
@@ -144,7 +155,7 @@ function App() {
   };
 
   const handleValidPaymentRequest = (paymentUrl) => {
-    setCapturedIframeUrl("");
+    setCapturedMessage(null);
     setCapturedPayload(null);
     setPaymentIframeLoaded(false);
     setPaymentDismissed(false);
@@ -154,16 +165,13 @@ function App() {
     setPaymentIframeSrc(paymentUrl);
   };
 
-  const handlePaymentIframeLoad = (event) => {
-    const iframeUrl = event.currentTarget.src;
+  const handlePaymentIframeLoad = () => {
     setPaymentIframeLoaded(true);
-    setCapturedIframeUrl(iframeUrl);
-    setCapturedPayload(readIframePayload(iframeUrl));
   };
 
   const capturedEntries = capturedPayload ? Object.entries(capturedPayload) : [];
 
-  return (
+return (
     <Box sx={{ backgroundColor: "#f4f6f8", minHeight: "100vh" }}>
       <AppBar position="static">
         <Toolbar>
@@ -270,31 +278,33 @@ function App() {
         <Card elevation={3} sx={{ borderRadius: 3, mb: 4 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Data Received From Iframe URL
+              Data Received via postMessage
             </Typography>
 
             {capturedPayload ? (
-              <>
-                <Typography
-                  variant="body2"
-                  sx={{ mb: 2, wordBreak: "break-all" }}
-                >
-                  <strong>Iframe URL:</strong> {capturedIframeUrl}
-                </Typography>
-                <Grid container spacing={2}>
-                  {capturedEntries.map(([key, value]) => (
-                    <Grid item xs={12} sm={6} key={key}>
-                      <Typography>
-                        <strong>{key}:</strong> {value || "Missing from iframe URL"}
-                      </Typography>
-                    </Grid>
-                  ))}
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Typography>
+                    <strong>Message Type:</strong> {capturedMessage?.gwMessageType}
+                  </Typography>
                 </Grid>
-              </>
+                <Grid item xs={12} sm={6}>
+                  <Typography>
+                    <strong>Message Id:</strong> {capturedMessage?.gwMessageId}
+                  </Typography>
+                </Grid>
+                {capturedEntries.map(([key, value]) => (
+                  <Grid item xs={12} sm={6} key={key}>
+                    <Typography>
+                      <strong>{key}:</strong> {value || "Missing from postMessage"}
+                    </Typography>
+                  </Grid>
+                ))}
+              </Grid>
             ) : (
               <Typography color="text.secondary">
                 {paymentIframeSrc && !paymentDismissed
-                  ? "Waiting for the payment iframe to load..."
+                  ? "Waiting for the iframe postMessage..."
                   : "No data received yet..."}
               </Typography>
             )}

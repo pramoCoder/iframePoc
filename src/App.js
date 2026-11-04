@@ -59,6 +59,10 @@ function App() {
 
       const data = event.data;
 
+      if (fromVisualforce) {
+        console.log("Payload from VF page:", data);
+      }
+
       if (data === null) {
         if (fromVisualforce) {
           setSfData(null);

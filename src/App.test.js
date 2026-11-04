@@ -18,42 +18,23 @@ const selectCustomer = (partyId) => {
   });
 };
 
-const postPaymentPayload = (iframeUrl) => {
-  const payload = Object.fromEntries(new URL(iframeUrl, window.location.origin).searchParams);
-
-  act(() => {
-    window.dispatchEvent(
-      new MessageEvent("message", {
-        origin: "https://racv--iagiqa--c.sandbox.vf.force.com",
-        data: {
-          gwMessageType: "PAYMENT_URL_PAYLOAD",
-          gwMessageId: payload.correlationId,
-          gwPayload: payload,
-        },
-      })
-    );
-  });
-};
-
-const rowText = (label) =>
-  screen.getByText(`${label}:`, { selector: "strong" }).parentElement.textContent;
-
-test("loads the payment iframe only after a valid submit and prints the posted payload", () => {
+test("loads the payment iframe only after a valid submit", () => {
   render(<App />);
 
   expect(screen.getByTitle("Search Iframe")).toBeInTheDocument();
   expect(screen.queryByTitle("Payment Iframe")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("amount")).toHaveValue("117816");
+  expect(screen.getByLabelText("amount (in cents)")).toHaveValue("117816");
   expect(screen.queryByLabelText("sessionId")).not.toBeInTheDocument();
   expect(screen.getByLabelText("customerId")).toHaveValue("");
-  expect(screen.getByText("No data received yet...")).toBeInTheDocument();
+  expect(screen.getByText("No Pay Now response yet...")).toBeInTheDocument();
+  expect(screen.queryByText("Payment URL Payload (iframe load)")).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
   expect(screen.getByText("Select a customer from the search results.")).toBeInTheDocument();
   expect(screen.queryByTitle("Payment Iframe")).not.toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText("amount"), {
+  fireEvent.change(screen.getByLabelText("amount (in cents)"), {
     target: { name: "amount", value: "12.5" },
   });
   selectCustomer("PARTY-123");
@@ -66,7 +47,7 @@ test("loads the payment iframe only after a valid submit and prints the posted p
   expect(screen.getByText("amount must be a whole number of cents greater than zero.")).toBeInTheDocument();
   expect(screen.queryByTitle("Payment Iframe")).not.toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText("amount"), {
+  fireEvent.change(screen.getByLabelText("amount (in cents)"), {
     target: { name: "amount", value: "117816" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Submit" }));
@@ -80,25 +61,37 @@ test("loads the payment iframe only after a valid submit and prints the posted p
   expect(iframeUrl).toContain("id=PARTY-123");
   expect(iframeUrl).toContain("brand=RACV");
   expect(iframeUrl).toContain("sessionId=774544f2-15a9-4bff-b8c8-78d5aac0bdad");
-  expect(screen.getByText("Waiting for the iframe postMessage...")).toBeInTheDocument();
+  expect(screen.queryByText("Payment URL Payload (iframe load)")).not.toBeInTheDocument();
+  expect(
+    screen.getByText("Complete payment in the iframe to receive the Pay Now response...")
+  ).toBeInTheDocument();
 
-  fireEvent.load(paymentIframe);
-  expect(screen.getByText("Waiting for the iframe postMessage...")).toBeInTheDocument();
-
-  postPaymentPayload(iframeUrl);
-
-  expect(rowText("Message Type")).toContain("PAYMENT_URL_PAYLOAD");
-  expect(rowText("amount")).toContain("117816");
-  expect(rowText("customerId")).toContain("PARTY-123");
-  expect(rowText("id")).toContain("PARTY-123");
-
-  fireEvent.change(screen.getByLabelText("amount"), {
-    target: { name: "amount", value: "999" },
+  act(() => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: "https://racv--iagiqa--c.sandbox.vf.force.com",
+        data: {
+          gwMessageType: "PAYMENT_URL_PAYLOAD",
+          gwMessageId: "550e8400-e29b-41d4-a716-446655440000",
+          gwPayload: {
+            paymentStatus: "",
+            policyNumber: "MOTV9000000010",
+            quoteNumber: "QTEP4101694602",
+            paymentAmount: "117816",
+            receiptNumber: "",
+            paymentNumber: "",
+            sessionId: "774544f2-15a9-4bff-b8c8-78d5aac0bdad",
+            correlationId: "550e8400-e29b-41d4-a716-446655440000",
+          },
+        },
+      })
+    );
   });
 
-  expect(screen.getByLabelText("amount")).toHaveValue("999");
-  expect(rowText("amount")).toContain("117816");
-  expect(rowText("amount")).not.toContain("999");
+  expect(screen.getByLabelText("customerId")).toHaveValue("PARTY-123");
+  expect(
+    screen.queryByText("Unable to load payment setup: Guidewire Id is missing for this customer.")
+  ).not.toBeInTheDocument();
 });
 
 test("rejects an invalid expiry and currency before rendering the payment iframe", () => {

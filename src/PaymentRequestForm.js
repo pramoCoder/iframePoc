@@ -13,8 +13,9 @@ const ISO_UTC_PATTERN =
 const PAYLOAD_FIELDS = [
   {
     key: "amount",
+    label: "amount (in cents)",
     defaultValue: "117816",
-    description: "Amount to charge in cents.",
+    description: "Whole cents per Pay Now contract (e.g. 10000 = $100.00).",
   },
   {
     key: "brand",
@@ -215,7 +216,7 @@ function PaymentRequestForm({ partyId, showMissingPartyAlert, onValidSubmit }) {
           {PAYLOAD_FIELDS.filter((field) => !field.hidden).map((field) => (
             <Grid item xs={12} sm={6} key={field.key}>
               <TextField
-                label={field.key}
+                label={field.label || field.key}
                 name={field.key}
                 value={field.fromSearch ? partyId : formValues[field.key]}
                 onChange={field.fromSearch ? undefined : handleFieldChange}

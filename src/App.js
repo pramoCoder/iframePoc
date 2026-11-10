@@ -21,49 +21,8 @@ import {
 import PaymentRequestForm from "./PaymentRequestForm";
 
 const TOAST_AUTO_HIDE_MS = 6000;
-const VF_SESSION_STALE_MS = 45000;
-const VF_SESSION_PROBE_MS = 20000;
-const VF_SESSION_TICK_MS = 1000;
 
 const isVisualforceOrigin = (origin) => origin.includes("sandbox.vf.force.com");
-
-const parsePayNowSessionIdFromUrl = (url) => {
-  if (!url) {
-    return "";
-  }
-  try {
-    return new URL(url).searchParams.get("sessionId") || "";
-  } catch (error) {
-    return "";
-  }
-};
-
-const extractSessionIdFromMessage = (data) => {
-  if (!data || typeof data !== "object") {
-    return "";
-  }
-  if (data.type === "IAG_SF_SESSION" && data.sessionId) {
-    return String(data.sessionId);
-  }
-  if (data.gwPayload?.sessionId) {
-    return String(data.gwPayload.sessionId);
-  }
-  if (data.sessionId) {
-    return String(data.sessionId);
-  }
-  return "";
-};
-
-const formatClockTime = (date) => {
-  if (!date) {
-    return "—";
-  }
-  return date.toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-};
 
 const MANAGER_VF_URL =
   "https://racv--iagiqa--c.sandbox.vf.force.com/apex/ExternalCustomerManagerVF";
@@ -123,20 +82,8 @@ function App() {
     message: "",
     severity: "info",
   });
-  const [payNowSessionId, setPayNowSessionId] = useState("");
-  const [vfReportedSessionId, setVfReportedSessionId] = useState("");
-  const [lastVfActivityAt, setLastVfActivityAt] = useState(null);
-  const [vfConnectivity, setVfConnectivity] = useState("unknown");
-  const [managerIframeStatus, setManagerIframeStatus] = useState("idle");
-  const [paymentIframeStatus, setPaymentIframeStatus] = useState("idle");
-  const [sessionProbeKey, setSessionProbeKey] = useState(0);
-  const [sessionProbeStatus, setSessionProbeStatus] = useState("idle");
-  const [monitorClock, setMonitorClock] = useState(() => new Date());
-
   const paymentIframeContainerRef = useRef(null);
   const paymentIframeRef = useRef(null);
-  const managerIframeRef = useRef(null);
-  const previousVfConnectivityRef = useRef("unknown");
 
   const showToast = useCallback((message, severity = "info") => {
     setToast({ open: true, message, severity });
@@ -157,9 +104,6 @@ function App() {
   const isPaymentActive =
     Boolean(paymentIframeSrc) && paymentIframeLoaded && !paymentDismissed;
 
-  const displayedSessionId =
-    payNowResponse?.sessionId || vfReportedSessionId || payNowSessionId || "—";
-
   useEffect(() => {
     setPaymentIframeLoaded(false);
     setPaymentDismissed(false);
@@ -174,9 +118,6 @@ function App() {
 
       if (!fromVisualforce) return;
 
-      setLastVfActivityAt(new Date());
-      setVfConnectivity("active");
-
       const data = event.data;
 
       if (data === null) {
@@ -190,11 +131,6 @@ function App() {
         return;
       }
 
-      const messageSessionId = extractSessionIdFromMessage(data);
-      if (messageSessionId) {
-        setVfReportedSessionId(messageSessionId);
-      }
-
       const payNowPayload = extractPayNowResponse(data);
       if (payNowPayload) {
         setPayNowResponse(payNowPayload);
@@ -202,9 +138,6 @@ function App() {
       }
 
       if (data.gwMessageType === "PAYMENT_URL_PAYLOAD") {
-        if (messageSessionId) {
-          setPayNowSessionId(messageSessionId);
-        }
         return;
       }
 
@@ -219,73 +152,6 @@ function App() {
       window.removeEventListener("message", handleMessage);
     };
   }, []);
-
-  useEffect(() => {
-    const parsed = parsePayNowSessionIdFromUrl(paymentIframeSrc);
-    if (parsed) {
-      setPayNowSessionId(parsed);
-    }
-  }, [paymentIframeSrc]);
-
-  useEffect(() => {
-    const timerId = window.setInterval(() => {
-      setMonitorClock(new Date());
-    }, VF_SESSION_TICK_MS);
-    return () => window.clearInterval(timerId);
-  }, []);
-
-  useEffect(() => {
-    const probeTimerId = window.setInterval(() => {
-      setSessionProbeStatus("checking");
-      setSessionProbeKey((current) => current + 1);
-    }, VF_SESSION_PROBE_MS);
-    return () => window.clearInterval(probeTimerId);
-  }, []);
-
-  useEffect(() => {
-    const iframesVisible =
-      managerIframeStatus === "loaded" || paymentIframeStatus === "loaded";
-
-    if (!iframesVisible) {
-      setVfConnectivity("unknown");
-      return;
-    }
-
-    if (sessionProbeStatus === "error") {
-      setVfConnectivity("lost");
-      return;
-    }
-
-    if (!lastVfActivityAt) {
-      setVfConnectivity("warming");
-      return;
-    }
-
-    const inactiveMs = Date.now() - lastVfActivityAt.getTime();
-    if (inactiveMs > VF_SESSION_STALE_MS) {
-      setVfConnectivity("stale");
-      return;
-    }
-
-    setVfConnectivity("active");
-  }, [
-    lastVfActivityAt,
-    managerIframeStatus,
-    paymentIframeStatus,
-    sessionProbeStatus,
-    monitorClock,
-  ]);
-
-  useEffect(() => {
-    const previous = previousVfConnectivityRef.current;
-    if (previous !== "lost" && vfConnectivity === "lost") {
-      showToast(
-        "Salesforce iframe session may have been lost. Refresh and sign in to IAGIQA again.",
-        "error"
-      );
-    }
-    previousVfConnectivityRef.current = vfConnectivity;
-  }, [vfConnectivity, showToast]);
 
   useEffect(() => {
     if (!isPaymentActive) {
@@ -370,43 +236,7 @@ function App() {
 
   const handlePaymentIframeLoad = () => {
     setPaymentIframeLoaded(true);
-    setPaymentIframeStatus("loaded");
-    setLastVfActivityAt(new Date());
   };
-
-  const handlePaymentIframeError = () => {
-    setPaymentIframeStatus("error");
-    setVfConnectivity("lost");
-  };
-
-  const handleManagerIframeLoad = () => {
-    setManagerIframeStatus("loaded");
-    setLastVfActivityAt(new Date());
-  };
-
-  const handleManagerIframeError = () => {
-    setManagerIframeStatus("error");
-    setVfConnectivity("lost");
-  };
-
-  const handleSessionProbeLoad = () => {
-    setSessionProbeStatus("ok");
-    setLastVfActivityAt(new Date());
-  };
-
-  const handleSessionProbeError = () => {
-    setSessionProbeStatus("error");
-    setVfConnectivity("lost");
-  };
-
-  const vfConnectivityColor =
-    vfConnectivity === "active"
-      ? "success.main"
-      : vfConnectivity === "stale" || vfConnectivity === "warming"
-        ? "warning.main"
-        : vfConnectivity === "lost"
-          ? "error.main"
-          : "text.secondary";
 
   const payNowResponseFieldOrder = [
     "paymentStatus",
@@ -421,65 +251,6 @@ function App() {
 
 return (
     <Box sx={{ backgroundColor: "#f4f6f8", minHeight: "100vh" }}>
-      <Box
-        sx={{
-          position: "fixed",
-          top: 12,
-          right: 12,
-          zIndex: 1400,
-          width: { xs: "calc(100% - 24px)", sm: 360 },
-          maxWidth: "100%",
-        }}
-      >
-        <Paper
-          elevation={6}
-          sx={{
-            p: 1.5,
-            borderRadius: 2,
-            border: "1px solid",
-            borderColor: vfConnectivityColor,
-            backgroundColor: "rgba(255,255,255,0.97)",
-          }}
-        >
-          <Typography variant="caption" color="text.secondary" display="block">
-            Session monitor (live)
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 0.5, wordBreak: "break-all" }}>
-            <strong>sessionId:</strong> {displayedSessionId}
-          </Typography>
-          <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
-            <strong>VF link:</strong>{" "}
-            <Box component="span" sx={{ color: vfConnectivityColor }}>
-              {vfConnectivity}
-            </Box>
-          </Typography>
-          <Typography variant="caption" display="block" color="text.secondary">
-            Last VF activity: {formatClockTime(lastVfActivityAt)} · probe:{" "}
-            {sessionProbeStatus}
-          </Typography>
-          <Typography variant="caption" display="block" color="text.secondary">
-            Search iframe: {managerIframeStatus} · Payment iframe:{" "}
-            {paymentIframeStatus}
-          </Typography>
-        </Paper>
-      </Box>
-
-      <iframe
-        key={sessionProbeKey}
-        title="Session probe"
-        src={`${MANAGER_VF_URL}?sessionProbe=${sessionProbeKey}`}
-        onLoad={handleSessionProbeLoad}
-        onError={handleSessionProbeError}
-        style={{
-          position: "fixed",
-          width: 0,
-          height: 0,
-          border: 0,
-          opacity: 0,
-          pointerEvents: "none",
-        }}
-      />
-
       <AppBar position="static">
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1, textAlign: "center" }}>
@@ -515,14 +286,11 @@ return (
                 }}
               >
                 <iframe
-                  ref={managerIframeRef}
                   src={MANAGER_VF_URL}
                   width="100%"
                   height="500px"
                   style={{ border: "none" }}
                   title="Search Iframe"
-                  onLoad={handleManagerIframeLoad}
-                  onError={handleManagerIframeError}
                 />
               </Box>
             </Grid>
@@ -559,7 +327,6 @@ return (
                     title="Payment Iframe"
                     tabIndex={0}
                     onLoad={handlePaymentIframeLoad}
-                    onError={handlePaymentIframeError}
                   />
                 </Box>
               </Grid>

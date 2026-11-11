@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   AppBar,
   Toolbar,
@@ -10,12 +10,6 @@ import {
   Paper,
   Grid,
   Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
-  Button,
   Snackbar,
 } from "@mui/material";
 import PaymentRequestForm from "./PaymentRequestForm";
@@ -23,9 +17,6 @@ import PaymentRequestForm from "./PaymentRequestForm";
 const TOAST_AUTO_HIDE_MS = 6000;
 
 const isVisualforceOrigin = (origin) => origin.includes("sandbox.vf.force.com");
-
-const MANAGER_VF_URL =
-  "https://racv--iagiqa--c.sandbox.vf.force.com/apex/ExternalCustomerManagerVF";
 
 const CUSTOMER_MESSAGE_TYPES = new Set([2, "2", "CUSTOMER_SELECTED"]);
 
@@ -71,9 +62,6 @@ const extractPayNowResponse = (data) => {
 
 function App() {
   const [sfData, setSfData] = useState(null);
-  const [paymentIframeLoaded, setPaymentIframeLoaded] = useState(false);
-  const [paymentDismissed, setPaymentDismissed] = useState(false);
-  const [showLeavePaymentDialog, setShowLeavePaymentDialog] = useState(false);
   const [paymentIframeSrc, setPaymentIframeSrc] = useState("");
   const [paymentLoadId, setPaymentLoadId] = useState(0);
   const [payNowResponse, setPayNowResponse] = useState(null);
@@ -82,8 +70,6 @@ function App() {
     message: "",
     severity: "info",
   });
-  const paymentIframeContainerRef = useRef(null);
-  const paymentIframeRef = useRef(null);
 
   const showToast = useCallback((message, severity = "info") => {
     setToast({ open: true, message, severity });
@@ -101,13 +87,7 @@ function App() {
     sfData?.gwPayload?.salesforceId ||
     "";
 
-  const isPaymentActive =
-    Boolean(paymentIframeSrc) && paymentIframeLoaded && !paymentDismissed;
-
   useEffect(() => {
-    setPaymentIframeLoaded(false);
-    setPaymentDismissed(false);
-    setShowLeavePaymentDialog(false);
     setPaymentIframeSrc("");
     setPayNowResponse(null);
   }, [partyId]);
@@ -154,42 +134,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isPaymentActive) {
-      return undefined;
-    }
-
-    const handleOutsideClick = (event) => {
-      if (showLeavePaymentDialog) {
-        return;
-      }
-
-      if (
-        paymentIframeContainerRef.current &&
-        !paymentIframeContainerRef.current.contains(event.target)
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        setShowLeavePaymentDialog(true);
-      }
-    };
-
-    document.addEventListener("mousedown", handleOutsideClick, true);
-
-    return () => {
-      document.removeEventListener("mousedown", handleOutsideClick, true);
-    };
-  }, [isPaymentActive, showLeavePaymentDialog]);
-
-  useEffect(() => {
-    if (paymentDismissed) {
-      showToast(
-        "Payment was closed. Submit the form again to reload the payment iframe.",
-        "warning"
-      );
-    }
-  }, [paymentDismissed, showToast]);
-
-  useEffect(() => {
     if (!payNowResponse?.paymentStatus) {
       return;
     }
@@ -206,36 +150,10 @@ function App() {
     );
   }, [payNowResponse, showToast]);
 
-  const focusPaymentIframe = () => {
-    paymentIframeRef.current?.focus();
-    try {
-      paymentIframeRef.current?.contentWindow?.focus();
-    } catch (error) {
-      console.warn("Unable to focus payment iframe:", error);
-    }
-  };
-
-  const handleConfirmLeavePayment = () => {
-    setShowLeavePaymentDialog(false);
-    setPaymentDismissed(true);
-  };
-
-  const handleCancelLeavePayment = () => {
-    setShowLeavePaymentDialog(false);
-    focusPaymentIframe();
-  };
-
   const handleValidPaymentRequest = (paymentUrl) => {
     setPayNowResponse(null);
-    setPaymentIframeLoaded(false);
-    setPaymentDismissed(false);
-    setShowLeavePaymentDialog(false);
     setPaymentLoadId((current) => current + 1);
     setPaymentIframeSrc(paymentUrl);
-  };
-
-  const handlePaymentIframeLoad = () => {
-    setPaymentIframeLoaded(true);
   };
 
   const payNowResponseFieldOrder = [
@@ -286,7 +204,7 @@ return (
                 }}
               >
                 <iframe
-                  src={MANAGER_VF_URL}
+                  src="https://racv--iagiqa--c.sandbox.vf.force.com/apex/ExternalCustomerManagerVF"
                   width="100%"
                   height="500px"
                   style={{ border: "none" }}
@@ -303,14 +221,13 @@ return (
               />
             </Grid>
 
-            {paymentIframeSrc && !paymentDismissed && (
+            {paymentIframeSrc && (
               <Grid item xs={12}>
                 <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
                   Payment Setup
                   {sfData?.gwPayload?.name ? ` for ${sfData.gwPayload.name}` : ""}
                 </Typography>
                 <Box
-                  ref={paymentIframeContainerRef}
                   sx={{
                     border: "2px solid #2e7d32",
                     borderRadius: 2,
@@ -319,14 +236,12 @@ return (
                 >
                   <iframe
                     key={paymentLoadId}
-                    ref={paymentIframeRef}
                     src={paymentIframeSrc}
                     width="100%"
                     height="550px"
                     style={{ border: "none" }}
                     title="Payment Iframe"
                     tabIndex={0}
-                    onLoad={handlePaymentIframeLoad}
                   />
                 </Box>
               </Grid>
@@ -357,7 +272,7 @@ return (
               </Grid>
             ) : (
               <Typography color="text.secondary">
-                {paymentIframeSrc && !paymentDismissed
+                {paymentIframeSrc
                   ? "Complete payment in the iframe to receive the Pay Now response..."
                   : "No Pay Now response yet..."}
               </Typography>
@@ -365,32 +280,6 @@ return (
           </CardContent>
         </Card>
       </Container>
-
-      <Dialog
-        open={showLeavePaymentDialog}
-        onClose={handleCancelLeavePayment}
-        aria-labelledby="leave-payment-dialog-title"
-      >
-        <DialogTitle id="leave-payment-dialog-title">
-          Payment In Progress
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Do not allow other operations while a payment is in progress.
-          </DialogContentText>
-          <DialogContentText sx={{ mt: 2 }}>
-            Are you sure you want to do something else?
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCancelLeavePayment} color="primary" variant="contained">
-            No
-          </Button>
-          <Button onClick={handleConfirmLeavePayment} color="warning" variant="outlined">
-            Yes
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Snackbar
         open={toast.open}

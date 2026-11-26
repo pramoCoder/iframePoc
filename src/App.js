@@ -141,6 +141,10 @@ function App() {
       showToast("Payment failed.", "error");
       return;
     }
+    if (payNowResponse.paymentIntent === "PAYMENT_DD") {
+      showToast("Payment success", "success");
+      return;
+    }
     if (!payNowResponse.receiptNumber) {
       return;
     }

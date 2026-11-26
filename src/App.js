@@ -253,6 +253,48 @@ return (
         <Card elevation={3} sx={{ borderRadius: 3, mb: 4 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
+              Data Received From Salesforce
+            </Typography>
+            {sfData ? (
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Typography>
+                    <strong>Message Type:</strong> {sfData.gwMessageType}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography>
+                    <strong>Message Id:</strong> {sfData.gwMessageId}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography>
+                    <strong>PartyId:</strong> {sfData.gwPayload?.partyId || "—"}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography>
+                    <strong>Name:</strong> {sfData.gwPayload?.name || "—"}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography>
+                    <strong>Salesforce Id:</strong>{" "}
+                    {sfData.gwPayload?.salesforceId || "—"}
+                  </Typography>
+                </Grid>
+              </Grid>
+            ) : (
+              <Typography color="text.secondary">
+                No data received yet...
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card elevation={3} sx={{ borderRadius: 3, mb: 4 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>
               Pay Now Response
             </Typography>
             {payNowResponse ? (

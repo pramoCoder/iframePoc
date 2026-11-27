@@ -169,6 +169,19 @@ function App() {
     "paymentNumber",
     "sessionId",
     "correlationId",
+    ...(payNowResponse?.paymentMethod === "CREDIT_CARD"
+      ? [
+          "paymentMethod",
+          "cardHolderName",
+          "cardNumber",
+          "expiryDateMonth",
+          "expiryDateYear",
+          "type",
+        ]
+      : []),
+    ...(payNowResponse?.paymentMethod === "BANK_ACCOUNT"
+      ? ["paymentMethod", "accountName", "accountNumber", "BSB"]
+      : []),
   ];
 
 return (
